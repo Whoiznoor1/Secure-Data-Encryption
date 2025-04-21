@@ -10,3 +10,6 @@ This app allows users to store and retrieve encrypted data securely using custom
 ## How to Run
 ```bash
 streamlit run secure_data.py
+
+
+Check out the live demo [here](https://secure-data-encryption-app-by-noorunisa.streamlit.app/)!
