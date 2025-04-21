@@ -6,80 +6,92 @@ from cryptography.fernet import Fernet
 import base64
 import uuid
 
-# Initialize session state variables
+# -------------------------🔧 Session Initialization -------------------------
 if 'error_count' not in st.session_state:
     st.session_state.error_count = 0
+
 if 'secure_store' not in st.session_state:
     st.session_state.secure_store = {}
+
 if 'active_screen' not in st.session_state:
     st.session_state.active_screen = "Dashboard"
+
 if 'last_error_time' not in st.session_state:
     st.session_state.last_error_time = 0
 
-# Hashing function for passcodes
+# -------------------------🔐 Security Utilities -------------------------
+
 def create_hash(passcode):
+    """Generate SHA-256 hash of passcode."""
     return hashlib.sha256(passcode.encode()).hexdigest()
 
-# Key derivation for Fernet
 def derive_key(passcode):
-    hashed = hashlib.sha256(passcode.encode()).digest()
-    return base64.urlsafe_b64encode(hashed[:32])
+    """Derive a Fernet-compatible encryption key from passcode."""
+    hash_digest = hashlib.sha256(passcode.encode()).digest()
+    return base64.urlsafe_b64encode(hash_digest[:32])
 
-# Encryption process
 def lock_data(plain_text, passcode):
+    """Encrypt user input using Fernet and passcode."""
     key = derive_key(passcode)
-    cipher = Fernet(key)
-    return cipher.encrypt(plain_text.encode()).decode()
+    fernet = Fernet(key)
+    return fernet.encrypt(plain_text.encode()).decode()
 
-# Decryption process
 def unlock_data(cipher_text, passcode, key_id):
+    """Attempt to decrypt user data with given passcode and entry ID."""
     try:
         hashed_key = create_hash(passcode)
-        if key_id in st.session_state.secure_store and st.session_state.secure_store[key_id]["passcode"] == hashed_key:
+        if key_id in st.session_state.secure_store and \
+           st.session_state.secure_store[key_id]["passcode"] == hashed_key:
+
             key = derive_key(passcode)
-            cipher = Fernet(key)
-            output = cipher.decrypt(cipher_text.encode()).decode()
+            decrypted = Fernet(key).decrypt(cipher_text.encode()).decode()
             st.session_state.error_count = 0
-            return output
+            return decrypted
         else:
             st.session_state.error_count += 1
             st.session_state.last_error_time = time.time()
             return None
-    except:
+    except Exception:
         st.session_state.error_count += 1
         st.session_state.last_error_time = time.time()
         return None
 
-# Unique ID generator
 def create_unique_id():
+    """Generate a new unique ID for each stored item."""
     return str(uuid.uuid4())
 
-# Reset function
 def clear_error_log():
+    """Reset failed attempt counter."""
     st.session_state.error_count = 0
 
-# Page switcher
 def switch_screen(screen):
+    """Change currently active screen."""
     st.session_state.active_screen = screen
 
-# ------------------- Streamlit App UI -------------------
 
-st.title("🔐 Secure Data Vault")
+# -------------------------📱 App UI Layout -------------------------
+
+st.title("🔐 Encrypted Info Vault")
+
+st.markdown("""
+Welcome to your **Secure Data Locker** 🔒  
+Store and access sensitive information using custom passcodes, protected by AES encryption under the hood.
+""")
 
 menu = ["Dashboard", "Save Info", "Access Info", "Admin Login"]
-user_choice = st.sidebar.selectbox("Navigate", menu, index=menu.index(st.session_state.active_screen))
+user_choice = st.sidebar.selectbox("📂 Menu", menu, index=menu.index(st.session_state.active_screen))
 st.session_state.active_screen = user_choice
 
-# Lock after 3 failed attempts
 if st.session_state.error_count >= 3:
     st.session_state.active_screen = "Admin Login"
-    st.warning("🔒 Access blocked due to multiple failures.")
+    st.warning("🔐 Access temporarily restricted due to multiple incorrect attempts.")
 
-# Home page
+# -------------------------🏠 Dashboard Screen -------------------------
+
 if st.session_state.active_screen == "Dashboard":
-    st.subheader("🏠 Welcome to Your Encrypted Vault")
-    st.write("Protect and retrieve sensitive information using private passcodes.")
-    
+    st.subheader("🏠 Main Dashboard")
+    st.markdown("Choose an action below:")
+
     col1, col2 = st.columns(2)
     with col1:
         if st.button("➕ Save New Info", use_container_width=True):
@@ -87,85 +99,102 @@ if st.session_state.active_screen == "Dashboard":
     with col2:
         if st.button("🔓 Access Info", use_container_width=True):
             switch_screen("Access Info")
-    
-    st.info(f"🗂 Total secured entries: {len(st.session_state.secure_store)}")
 
-# Store data page
+    st.info(f"📦 Total entries stored securely: `{len(st.session_state.secure_store)}`")
+
+
+# -------------------------💾 Save Info Screen -------------------------
+
 elif st.session_state.active_screen == "Save Info":
-    st.subheader("📝 Save Confidential Info")
-    user_input = st.text_area("Enter Text to Secure:")
-    passcode = st.text_input("Create Passcode:", type="password")
-    passcode_confirm = st.text_input("Confirm Passcode:", type="password")
+    st.subheader("📝 Store Confidential Data")
 
-    if st.button("Encrypt & Store"):
+    st.markdown("Provide the details below to encrypt and save your data safely.")
+
+    user_input = st.text_area("🔐 Text to Secure:")
+    passcode = st.text_input("🔑 Create Passcode:", type="password")
+    passcode_confirm = st.text_input("🔁 Confirm Passcode:", type="password")
+
+    if st.button("✅ Encrypt & Save"):
         if user_input and passcode and passcode_confirm:
             if passcode != passcode_confirm:
-                st.error("❌ Passcodes do not match!")
+                st.error("⚠️ Passcodes don't match.")
             else:
                 entry_id = create_unique_id()
+                encrypted_text = lock_data(user_input, passcode)
                 hashed_pass = create_hash(passcode)
-                encrypted_entry = lock_data(user_input, passcode)
 
                 st.session_state.secure_store[entry_id] = {
-                    "encrypted_text": encrypted_entry,
+                    "encrypted_text": encrypted_text,
                     "passcode": hashed_pass
                 }
 
-                st.success("✅ Info secured successfully!")
+                st.success("🎉 Info encrypted and saved!")
                 st.code(entry_id, language="text")
-                st.info("🔑 Save your Entry ID to retrieve this later.")
+                st.markdown("✅ Save this Entry ID to retrieve your data in the future.")
         else:
-            st.error("⚠️ Please fill out all fields.")
+            st.error("⚠️ All fields are required.")
 
-# Retrieve data page
+
+# -------------------------🔍 Access Info Screen -------------------------
+
 elif st.session_state.active_screen == "Access Info":
-    st.subheader("🔎 Access Encrypted Info")
-    remaining_tries = 3 - st.session_state.error_count
-    st.info(f"Attempts left: {remaining_tries}")
+    st.subheader("🔍 Retrieve Your Encrypted Info")
 
-    entry_id = st.text_input("Enter Entry ID:")
-    access_code = st.text_input("Enter Passcode:", type="password")
+    remaining = 3 - st.session_state.error_count
+    st.info(f"⏳ Remaining Attempts: `{remaining}`")
 
-    if st.button("Decrypt"):
+    entry_id = st.text_input("🆔 Entry ID:")
+    access_code = st.text_input("🔑 Passcode:", type="password")
+
+    if st.button("🔓 Decrypt Info"):
         if entry_id and access_code:
             if entry_id in st.session_state.secure_store:
                 encrypted_val = st.session_state.secure_store[entry_id]["encrypted_text"]
-                decrypted_val = unlock_data(encrypted_val, access_code, entry_id)
+                result = unlock_data(encrypted_val, access_code, entry_id)
 
-                if decrypted_val:
-                    st.success("🔓 Info Decrypted!")
-                    st.markdown("#### Your Info:")
-                    st.code(decrypted_val, language="text")
+                if result:
+                    st.success("🔓 Decryption Successful!")
+                    st.markdown("#### 📄 Decrypted Info:")
+                    st.code(result, language="text")
                 else:
-                    st.error(f"❌ Invalid passcode! Remaining attempts: {3 - st.session_state.error_count}")
+                    st.error(f"❌ Invalid passcode. Remaining attempts: {3 - st.session_state.error_count}")
             else:
-                st.error("🚫 Entry ID not recognized.")
+                st.error("🚫 Entry ID not found.")
 
             if st.session_state.error_count >= 3:
-                st.warning("🚨 Maximum attempts reached. Redirecting to login.")
-                st.session_state.active_screen = "Admin Login"
+                st.warning("🚨 Too many failed attempts. Redirecting to Admin Login...")
                 st.rerun()
         else:
-            st.error("⚠️ Both fields must be filled.")
+            st.error("⚠️ Please complete all fields.")
 
-# Login after lockout
+
+# -------------------------🛠️ Admin Login Screen -------------------------
+
 elif st.session_state.active_screen == "Admin Login":
-    st.subheader("🔐 Admin Verification")
+    st.subheader("🛡️ Admin Access Required")
 
-    if time.time() - st.session_state.last_error_time < 10 and st.session_state.error_count >= 3:
-        wait_time = int(10 - (time.time() - st.session_state.last_error_time))
-        st.warning(f"⏳ Wait {wait_time} seconds before retrying.")
+    cooldown = 10
+    time_remaining = cooldown - (time.time() - st.session_state.last_error_time)
+
+    if time_remaining > 0 and st.session_state.error_count >= 3:
+        st.warning(f"⏳ Please wait `{int(time_remaining)}` seconds before retrying.")
     else:
-        master_key = st.text_input("Enter Admin Password:", type="password")
-        if st.button("Verify"):
-            if master_key == "admin12345":  # Modify this in production!
+        master_pass = st.text_input("🔐 Admin Password:", type="password")
+        if st.button("🔓 Verify"):
+            if master_pass == "admin12345":  # Change this in production!
                 clear_error_log()
                 st.success("✅ Access Restored.")
-                st.session_state.active_screen = "Dashboard"
+                switch_screen("Dashboard")
                 st.rerun()
             else:
                 st.error("❌ Incorrect admin password.")
 
-# Footer
+
+# -------------------------📌 Footer -------------------------
+
 st.markdown("---")
-st.markdown("🔐 Secure Vault Project | Educational Use | Modified by You 😎")
+st.markdown("""
+#### 🔐 Secure Info Vault  
+_Developed for educational and demonstration purposes._  
+Built using **Streamlit**, **Fernet Encryption**, and **Python** 🐍
+""")
