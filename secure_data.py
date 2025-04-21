@@ -181,7 +181,7 @@ elif st.session_state.active_screen == "Admin Login":
     else:
         master_pass = st.text_input("🔐 Admin Password:", type="password")
         if st.button("🔓 Verify"):
-            if master_pass == "admin12345":  # Change this in production!
+            if master_pass == "12345":  # Change this in production!
                 clear_error_log()
                 st.success("✅ Access Restored.")
                 switch_screen("Dashboard")
